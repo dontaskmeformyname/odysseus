@@ -1,15 +1,23 @@
-# Standalone AMD ROCm GPU Compose file for stack-management UIs (Portainer,
-# Coolify, Dockhand, etc.) that accept only a single Compose file and do not
-# reliably honor COMPOSE_FILE or multiple `-f` overlays.
+# Odysseus — final docker-compose.yml (AMD ROCm + Ollama, all in Docker)
 #
-# This is equivalent to: docker-compose.yml + docker/gpu.amd.yml.
-# The base docker-compose.yml plus the docker/gpu.amd.yml overlay remain the
-# source of truth — CLI users should keep using the COMPOSE_FILE overlay
-# workflow. Keep this file in sync with both when either changes.
+# Merged from: docker-compose.yml + docker/gpu.amd.yml + docker/ollama-rocm.yml
 #
-# Requires ROCm drivers on the host (kfd + DRI devices) and the host user
-# running Docker in the `video` and `render` groups. Set RENDER_GID to your
-# host's numeric render group id when needed. See docker/gpu.amd.yml for details.
+# Requires:
+#   - amdgpu kernel driver on the host (kfd + DRI devices)
+#   - user in video/render groups: sudo usermod -aG render,video $USER
+#
+# .env settings needed:
+#   RENDER_GID=<getent group render | cut -d: -f3>
+#   HSA_OVERRIDE_GFX_VERSION=10.3.0   # RX 6900 XT (gfx1030)
+#
+# Optional .env overrides:
+#   APP_PORT=7000
+#   PUID=1000
+#   PGID=1000
+#
+# After startup, pull a model:
+#   docker compose exec ollama ollama pull qwen3:14b
+
 services:
   odysseus:
     build: .
@@ -29,14 +37,23 @@ services:
       # container recreate does not silently remove installed serve engines.
       - ${APP_DATA_DIR:-./data}/local:/app/.local:z
     extra_hosts:
-      # Lets the container reach local services on the Docker host, including
-      # Ollama at http://host.docker.internal:11434.
+      # Lets the container reach local services on the Docker host.
       - "host.docker.internal:host-gateway"
+    # ── AMD ROCm GPU passthrough (from docker/gpu.amd.yml) ──
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+      - ${RENDER_GID:-render}
     environment:
       - LLM_HOST=${LLM_HOST:-localhost}
       - LLM_HOSTS=${LLM_HOSTS:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+      # Point Odysseus at the bundled Ollama ROCm container.
+      - OLLAMA_BASE_URL=http://ollama:11434/v1
+      # Embeddings via Ollama too.
+      - EMBEDDING_URL=http://ollama:11434/v1/embeddings
       - RESEARCH_LLM_ENDPOINT=${RESEARCH_LLM_ENDPOINT:-}
       - HF_TOKEN=${HF_TOKEN:-}
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
@@ -50,7 +67,6 @@ services:
       - ODYSSEUS_ADMIN_PASSWORD=${ODYSSEUS_ADMIN_PASSWORD:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - SECURE_COOKIES=${SECURE_COOKIES:-false}
-      - EMBEDDING_URL=${EMBEDDING_URL:-}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-}
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
       - FASTEMBED_MODEL=${FASTEMBED_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
@@ -76,30 +92,39 @@ services:
       - GOOGLE_OAUTH_REDIRECT_URI=${GOOGLE_OAUTH_REDIRECT_URI:-}
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - SERPER_API_KEY=${SERPER_API_KEY:-}
+      # HSA_OVERRIDE_GFX_VERSION: passthrough — only set when defined in .env.
+      # RX 6900 XT (gfx1030) → HSA_OVERRIDE_GFX_VERSION=10.3.0
+      - HSA_OVERRIDE_GFX_VERSION
       # PUID / PGID — the user/group the container drops to before
       # running uvicorn (entrypoint also chowns /app/data + /app/logs
       # to match, so bind-mounted files stay editable from the host).
-      # 1000 is the default first user on most Linux installs. If your
-      # host user has a different id, override here or via .env, e.g.:
-      #   PUID=1001
-      #   PGID=1001
-      # Find yours with:  id -u  /  id -g
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
-      - HSA_OVERRIDE_GFX_VERSION
     depends_on:
       searxng:
         condition: service_healthy
       chromadb:
         condition: service_started
+      ollama:
+        condition: service_started
     restart: unless-stopped
-    # AMD ROCm overlay (from docker/gpu.amd.yml).
+
+  # ── Ollama with AMD ROCm (from docker/ollama-rocm.yml) ──
+  ollama:
+    image: docker.io/ollama/ollama:rocm
     devices:
       - /dev/kfd
       - /dev/dri
     group_add:
       - video
       - ${RENDER_GID:-render}
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    restart: unless-stopped
 
   chromadb:
     image: docker.io/chromadb/chroma:latest
@@ -139,13 +164,6 @@ services:
     environment:
       - SEARXNG_BASE_URL=http://localhost:8080/
       - SEARXNG_SECRET=${SEARXNG_SECRET:-}
-    # The official searxng image runs as the non-root `searxng` user, but its
-    # entrypoint still needs to chown /etc/searxng on first boot, drop privs via
-    # su-exec, and (with our wrapper above) write settings.yml into the named
-    # volume. Without these capabilities the wrapper aborts at the redirection
-    # with EACCES and the container fails its healthcheck with permission
-    # errors during setup. Mirrors the cap set recommended by the upstream
-    # searxng-docker compose file. See issue #721.
     cap_drop:
       - ALL
     cap_add:
@@ -176,3 +194,4 @@ volumes:
   searxng-data:
   chromadb-data:
   ntfy-cache:
+  ollama-data:

@@ -253,6 +253,30 @@ COMPOSE_FILE=docker-compose.yml:docker/gpu.amd.yml
 RENDER_GID=989
 ```
 
+Consumer Radeon cards (RDNA2/3) often need `HSA_OVERRIDE_GFX_VERSION` to force
+the correct ROCm code object — without it, `llama-server` may fall back to CPU
+or fail to detect the GPU. Find your gfx target:
+
+```bash
+rocminfo | grep -m1 gfx
+```
+
+Common values:
+
+| GPU | gfx | HSA_OVERRIDE_GFX_VERSION |
+|-----|-----|--------------------------|
+| RX 6900 XT / 6800 XT | gfx1030 | 10.3.0 |
+| RX 7900 XTX | gfx1100 | 11.0.0 |
+
+Add to `.env`:
+
+```bash
+HSA_OVERRIDE_GFX_VERSION=10.3.0
+```
+
+Leave unset for datacenter Instinct (MI250/MI300) cards — they are detected
+natively.
+
 For NVIDIA/AMD GPU support, also read the comments in the selected overlay file: docker/gpu.nvidia.yml or docker/gpu.amd.yml.
 
 **Stack-management UIs (Portainer, Coolify, Dockhand, etc.).** These tools

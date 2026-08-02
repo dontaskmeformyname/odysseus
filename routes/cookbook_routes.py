@@ -2127,6 +2127,14 @@ def setup_cookbook_routes() -> APIRouter:
                 runner_lines.append(f"export HF_TOKEN='{_bash_squote(req.hf_token)}'")
             if req.gpus:
                 runner_lines.append(f"export CUDA_VISIBLE_DEVICES='{req.gpus}'")
+                # AMD ROCm equivalents for GPU selection.
+                runner_lines.append(f"export HIP_VISIBLE_DEVICES='{req.gpus}'")
+                runner_lines.append(f"export ROCR_VISIBLE_DEVICES='{req.gpus}'")
+            # Pass HSA_OVERRIDE_GFX_VERSION through to the serve process.
+            # Consumer Radeon (RDNA2/3) needs this to force the correct ROCm
+            # code object. Set via Docker env (docker/gpu.amd.yml) or .env.
+            # Only export when non-empty — an empty value can confuse ROCm/HIP.
+            runner_lines.append('if [ -n "${HSA_OVERRIDE_GFX_VERSION:-}" ]; then export HSA_OVERRIDE_GFX_VERSION; fi')
             if req.env_prefix:
                 runner_lines.append(_safe_env_prefix(req.env_prefix))
             else:
