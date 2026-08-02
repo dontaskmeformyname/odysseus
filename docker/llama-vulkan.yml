@@ -1,0 +1,68 @@
+# llama.cpp Vulkan server overlay. Enable by setting COMPOSE_FILE in .env:
+#
+#   COMPOSE_FILE=docker-compose.yml:docker/llama-vulkan.yml
+#
+# Or combined with the AMD GPU overlay (recommended for RDNA 2):
+#
+#   COMPOSE_FILE=docker-compose.yml:docker/gpu.amd.yml:docker/llama-vulkan.yml
+#
+# This adds a separate llama-server container with Vulkan backend that
+# provides an OpenAI-compatible API at http://llama-vulkan:8082/v1.
+# Odysseus connects to it instead of (or alongside) Ollama.
+#
+# Vulkan only needs /dev/dri (DRI render nodes) — no /dev/kfd, no ROCm.
+# The host user running Docker should be in the `video` and `render`
+# groups. Set RENDER_GID to your host's numeric render group id.
+#
+# Model reuse: mount your existing Ollama model volume read-only into
+# /ollama-models — the entrypoint auto-detects GGUF blobs, no re-download.
+# Alternatively, place .gguf files in a directory and mount it to /models.
+#
+# Configure Odysseus to use this backend:
+#   RESEARCH_LLM_ENDPOINT=http://llama-vulkan:8082/v1/chat/completions
+#   LLM_HOSTS=llama-vulkan
+
+services:
+  llama-vulkan:
+    build:
+      context: .
+      dockerfile: docker/llama-vulkan/Dockerfile
+    # Only /dev/dri for Vulkan — no /dev/kfd (ROCm) needed.
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - ${RENDER_GID:-render}
+    environment:
+      # Explicit model path (optional). If unset, auto-detects from
+      # /ollama-models or /models.
+      - LLAMA_MODEL=${LLAMA_MODEL:-}
+      # Server config
+      - LLAMA_VULKAN_PORT=8082
+      - LLAMA_VULKAN_HOST=0.0.0.0
+      - LLAMA_VULKAN_CTX=${LLAMA_VULKAN_CTX:-8192}
+      - LLAMA_VULKAN_NGL=${LLAMA_VULKAN_NGL:-999}
+      - LLAMA_VULKAN_THREADS=${LLAMA_VULKAN_THREADS:-}
+      - LLAMA_VULKAN_EXTRA_ARGS=${LLAMA_VULKAN_EXTRA_ARGS:-}
+    volumes:
+      # Reuse Ollama's model volume — auto-detects GGUF blobs.
+      # Set OLLAMA_VOLUME_NAME to the Docker volume name (default: ollama).
+      - ${OLLAMA_VOLUME_NAME:-ollama}:/ollama-models:ro
+      # Standalone GGUF model directory (optional).
+      - ${LLAMA_VULKAN_MODELS_DIR:-./models}:/models:z
+    ports:
+      - "${LLAMA_VULKAN_BIND:-127.0.0.1}:8082:8082"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8082/health || curl -sf http://localhost:8082/v1/models || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  odysseus:
+    environment:
+      # Wire Odysseus to the Vulkan backend's OpenAI-compatible API.
+      - RESEARCH_LLM_ENDPOINT=http://llama-vulkan:8082/v1/chat/completions
+      # Add to LLM_HOSTS so Odysseus discovers it during model scanning.
+      - LLM_HOSTS=${LLM_HOSTS:-llama-vulkan}
