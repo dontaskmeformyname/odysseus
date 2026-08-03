@@ -29,6 +29,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     libcurl4-openssl-dev \
+    libvulkan-dev \
+    glslang-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone at pinned ref.
