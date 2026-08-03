@@ -44,6 +44,9 @@ RUN cmake -S /llama.cpp -B /llama.cpp/build \
     -DLLAMA_CURL=ON \
     -DCMAKE_BUILD_TYPE=Release \
     -DGGML_NATIVE=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DLLAMA_LIBRARY_TYPE=static \
+    -DGGML_LIBRARY_TYPE=static \
     && cmake --build /llama.cpp/build --config Release -j$(nproc) \
     && cp /llama.cpp/build/bin/llama-server /llama-server \
     && cp /llama.cpp/build/bin/llama-cli /llama-cli
