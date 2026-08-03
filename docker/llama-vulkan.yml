@@ -66,3 +66,8 @@ services:
       - RESEARCH_LLM_ENDPOINT=http://llama-vulkan:8082/v1/chat/completions
       # Add to LLM_HOSTS so Odysseus discovers it during model scanning.
       - LLM_HOSTS=${LLM_HOSTS:-llama-vulkan}
+
+volumes:
+  ollama:
+    external: true
+    name: ${OLLAMA_VOLUME_NAME:-ollama}

@@ -174,3 +174,6 @@ volumes:
   searxng-data:
   chromadb-data:
   ntfy-cache:
+  ollama:
+    external: true
+    name: ${OLLAMA_VOLUME_NAME:-ollama}
