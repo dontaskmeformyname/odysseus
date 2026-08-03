@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libcurl4-openssl-dev \
     libvulkan-dev \
+    glslc \
     glslang-tools \
     && rm -rf /var/lib/apt/lists/*
 
