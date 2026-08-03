@@ -47,7 +47,7 @@ services:
     volumes:
       # Reuse Ollama's model volume — auto-detects GGUF blobs.
       # Set OLLAMA_VOLUME_NAME to the Docker volume name (default: ollama).
-      - ${OLLAMA_VOLUME_NAME:-ollama}:/ollama-models:ro
+      - ollama-models:/ollama-models:ro
       # Standalone GGUF model directory (optional).
       - ${LLAMA_VULKAN_MODELS_DIR:-./models}:/models:z
     ports:
@@ -68,6 +68,6 @@ services:
       - LLM_HOSTS=${LLM_HOSTS:-llama-vulkan}
 
 volumes:
-  ollama:
+  ollama-models:
     external: true
     name: ${OLLAMA_VOLUME_NAME:-ollama}
