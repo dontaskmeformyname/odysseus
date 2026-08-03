@@ -65,6 +65,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vulkan-tools \
     ca-certificates \
     libcurl4 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /llama-server /usr/local/bin/llama-server
